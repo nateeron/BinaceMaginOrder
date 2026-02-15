@@ -23,6 +23,7 @@
       margin: 0;
       padding: 24px;
       min-height: 100vh;
+      overflow-x: hidden;
     }
     h1 {
       font-size: 1.5rem;
@@ -223,44 +224,68 @@
     .filter-row input[type="datetime-local"] { width: 180px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
     .filter-row select { width: 120px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
     .filter-row input::placeholder { color: var(--muted); opacity: 0.8; }
-    /* TradingView-style last price ticker */
+    /* TradingView-style last price ticker — ยาวเท่า minichart TV */
     .tv-ticker-wrap {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
       align-items: stretch;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+      min-width: 0;
     }
     .tv-ticker-card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 16px;
-      min-width: 140px;
+      border-right: none;
+      border-radius: 0;
+      padding: 14px 18px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      min-height: 0;
+      min-width: 0;
     }
-    .tv-ticker-card:hover { border-color: #3d4f6d; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .tv-ticker-card:first-child { border-radius: 10px 0 0 10px; border-left: 1px solid var(--border); }
+    .tv-ticker-card:last-child { border-radius: 0 10px 10px 0; border-right: 1px solid var(--border); }
+    .tv-ticker-card:only-child { border-radius: 10px; border: 1px solid var(--border); }
+    .tv-ticker-card + .tv-ticker-card { border-left: 1px solid var(--border); }
+    .tv-ticker-card:hover { border-color: #3d4f6d; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
     .tv-ticker-card .tv-symbol {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     .tv-ticker-card .tv-price {
-      font-size: 1.25rem;
+      font-size: 1.35rem;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
       color: var(--text);
       letter-spacing: 0.02em;
+      line-height: 1.2;
+    }
+    .tv-ticker-card .tv-mini-chart-wrap {
+      margin-top: 10px;
+      height: 40px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.25);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .tv-ticker-card .tv-mini-chart {
+      display: block;
+      width: 100%;
+      height: 40px;
     }
     .tv-ticker-card .tv-live {
       font-size: 9px;
       color: var(--buy);
-      margin-top: 4px;
+      margin-top: 6px;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -274,6 +299,13 @@
       animation: tv-pulse 1.2s ease-in-out infinite;
     }
     @keyframes tv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @media (max-width: 768px) {
+      .tv-ticker-wrap { grid-template-columns: 1fr; }
+      .tv-ticker-card { border-radius: 10px !important; border: 1px solid var(--border) !important; margin-bottom: 0; }
+      .tv-ticker-card + .tv-ticker-card { border-top: none; margin-top: -1px; }
+      .tv-ticker-card:first-child { border-radius: 10px 10px 0 0 !important; }
+      .tv-ticker-card:last-child { border-radius: 0 0 10px 10px !important; }
+    }
     .tv-ticker-header {
       display: flex;
       align-items: center;
@@ -293,7 +325,39 @@
       cursor: pointer;
     }
     .tv-refresh-btn:hover { background: #3d4f6d; }
+    /* TradingView Mini Charts — inside Last price card, ไม่เลยจอขณะย่อ */
+    .tv-mini-charts-wrap {
+      width: 100%;
+      max-width: 100%;
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+      border-top: 1px solid var(--border);
+      overflow: hidden;
+      min-width: 0;
+    }
+    .tv-mini-chart-item {
+      min-height: 180px;
+      min-width: 0;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+    .tv-mini-chart-item:last-child { border-right: none; }
+    .tv-mini-chart-item tv-mini-chart {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      height: 180px;
+      min-width: 0;
+    }
+    @media (max-width: 768px) {
+      .tv-mini-charts-wrap { grid-template-columns: 1fr; }
+      .tv-mini-chart-item { border-right: none; border-bottom: 1px solid var(--border); }
+      .tv-mini-chart-item:last-child { border-bottom: none; }
+    }
   </style>
+  <script type="module" src="https://widgets.tradingview-widget.com/w/th_TH/tv-mini-chart.js"></script>
 </head>
 <body>
   <h1>Binance Cross Margin Orders</h1>
@@ -346,6 +410,17 @@
     </div>
     <div id="last-price-loading" style="font-size: 13px; color: var(--muted); padding: 8px 0;">Loading…</div>
     <div id="last-price-list" class="tv-ticker-wrap" style="display: none;"></div>
+    <div class="tv-mini-charts-wrap">
+      <div class="tv-mini-chart-item">
+        <tv-mini-chart symbol="BINANCE:XRPUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
+      </div>
+      <div class="tv-mini-chart-item">
+        <tv-mini-chart symbol="BINANCE:BNBUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
+      </div>
+      <div class="tv-mini-chart-item">
+        <tv-mini-chart symbol="BINANCE:BTCUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
+      </div>
+    </div>
   </div>
 
   <div class="chart-wrap">
@@ -417,6 +492,7 @@
     const REQ_BASE = { OrderId: null };
     const DEFAULT_SYMBOLS = ['XRPUSDT', 'BNBUSDT', 'BTCUSDT'];
     const TICKER_RENDER_THROTTLE_MS = 400;
+    const PRICE_HISTORY_MAX = 80;
     function getReq() {
       const configEl = document.getElementById('filter-config-id');
       const symbolEl = document.getElementById('filter-symbol');
@@ -449,6 +525,7 @@
     let matchedOrderIds = new Set();
     let showMatchedPairs = true;
     let lastPrices = {}; // { 'XRPUSDT': 2.45, 'BNBUSDT': 580, ... }
+    let lastPriceHistory = {}; // { 'XRPUSDT': [2.1, 2.2, ...], ... } for mini chart
     let tickerWs = null;
     let tickerReconnectTimer = null;
     let tickerRenderScheduled = null;
@@ -486,6 +563,32 @@
       return out;
     }
 
+    function drawSparkline(canvas, data) {
+      if (!canvas || !data || data.length < 2) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const min = Math.min(...data);
+      const max = Math.max(...data);
+      const range = max - min || 1;
+      const pad = 2;
+      const up = data[data.length - 1] >= data[0];
+      ctx.strokeStyle = up ? '#3fb950' : '#de5959';
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      const step = (w - pad * 2) / (data.length - 1);
+      for (let i = 0; i < data.length; i++) {
+        const x = pad + i * step;
+        const y = h - pad - ((data[i] - min) / range) * (h - pad * 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
     function updateLastPriceCard(prices) {
       const loading = document.getElementById('last-price-loading');
       const list = document.getElementById('last-price-list');
@@ -498,9 +601,15 @@
           <div class="tv-ticker-card">
             <div class="tv-symbol">${s}</div>
             <div class="tv-price">${formatNum(prices[s])}</div>
+            <div class="tv-mini-chart-wrap"><canvas class="tv-mini-chart" data-symbol="${s}" width="140" height="36"></canvas></div>
             <div class="tv-live">Live</div>
           </div>
         `).join('');
+        list.querySelectorAll('.tv-mini-chart').forEach(canvas => {
+          const sym = canvas.dataset.symbol;
+          const data = lastPriceHistory[sym] || (prices[sym] != null ? [prices[sym]] : []);
+          drawSparkline(canvas, data);
+        });
       }
     }
 
@@ -543,6 +652,9 @@
               const p = parseFloat(priceStr);
               if (!isNaN(p)) {
                 lastPrices[sym] = p;
+                if (!lastPriceHistory[sym]) lastPriceHistory[sym] = [];
+                lastPriceHistory[sym].push(p);
+                if (lastPriceHistory[sym].length > PRICE_HISTORY_MAX) lastPriceHistory[sym].shift();
                 if (lastOrders.length || Object.keys(lastPrices).length) scheduleTickerRender();
               }
             }
@@ -1375,6 +1487,7 @@
         const symbolsToFetch = [...new Set([...orders.map(o => o.symbol).filter(Boolean), ...DEFAULT_SYMBOLS])];
         try {
           lastPrices = await getBinanceLastPrices(symbolsToFetch.length ? symbolsToFetch : DEFAULT_SYMBOLS);
+          Object.keys(lastPrices).forEach(s => { if (!lastPriceHistory[s] || lastPriceHistory[s].length === 0) lastPriceHistory[s] = [lastPrices[s], lastPrices[s]]; });
           updateLastPriceCard(lastPrices);
           startTickerStream(symbolsToFetch.length ? symbolsToFetch : DEFAULT_SYMBOLS);
         } catch (_) {}
@@ -1407,6 +1520,7 @@
       const symbols = [...new Set([...lastOrders.map(o => o.symbol).filter(Boolean), ...DEFAULT_SYMBOLS])];
       try {
         lastPrices = await getBinanceLastPrices(symbols.length ? symbols : DEFAULT_SYMBOLS);
+        Object.keys(lastPrices).forEach(s => { if (!lastPriceHistory[s] || lastPriceHistory[s].length === 0) lastPriceHistory[s] = [lastPrices[s], lastPrices[s]]; });
         updateLastPriceCard(lastPrices);
         startTickerStream(symbols.length ? symbols : DEFAULT_SYMBOLS);
         renderTable(lastOrders, selectedCardRow !== null);
