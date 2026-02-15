@@ -186,6 +186,8 @@
     tr.tr-side-sell .td-quantity, tr.tr-side-sell .td-qty-filled { color: #e2972f; }
     .table-wrap .td-quote-filled { color: #29beb5; }
     .table-wrap .td-profit { color: #3c8b42; }
+    .table-wrap .td-profit.td-negative { color: #de5959; }
+    .table-wrap .td-tp-negative { color: #de5959; }
     .table-wrap .td-type-market { color: #7378f1; }
     .table-wrap .td-type-limit { color: #b079e2; }
     tr.tr-side-buy td { background: #0f1b0db0; }
@@ -221,6 +223,76 @@
     .filter-row input[type="datetime-local"] { width: 180px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
     .filter-row select { width: 120px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
     .filter-row input::placeholder { color: var(--muted); opacity: 0.8; }
+    /* TradingView-style last price ticker */
+    .tv-ticker-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .tv-ticker-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      min-width: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .tv-ticker-card:hover { border-color: #3d4f6d; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .tv-ticker-card .tv-symbol {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .tv-ticker-card .tv-price {
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    .tv-ticker-card .tv-live {
+      font-size: 9px;
+      color: var(--buy);
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tv-ticker-card .tv-live::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: tv-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes tv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .tv-ticker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .tv-ticker-header .card-title { margin-bottom: 0; }
+    .tv-refresh-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .tv-refresh-btn:hover { background: #3d4f6d; }
   </style>
 </head>
 <body>
@@ -267,6 +339,15 @@
   </div>
   <div id="error" class="error" style="display: none;"></div>
 
+  <div class="card" id="last-price-cards-wrap" style="margin-bottom: 16px;">
+    <div class="tv-ticker-header">
+      <div class="card-title">Last price <span style="font-size: 10px; color: var(--muted); font-weight: normal;">real-time</span></div>
+      <button type="button" id="btn-refresh-last-price" class="tv-refresh-btn">Refresh</button>
+    </div>
+    <div id="last-price-loading" style="font-size: 13px; color: var(--muted); padding: 8px 0;">Loading…</div>
+    <div id="last-price-list" class="tv-ticker-wrap" style="display: none;"></div>
+  </div>
+
   <div class="chart-wrap">
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
       <h2 style="margin: 0;">Price AVG by Create Time (FILLED only) — click table row to highlight</h2>
@@ -288,7 +369,7 @@
     <button type="button" id="btn-export-excel">Export Excel</button>
     <button type="button" id="btn-export-csv">Export CSV / Google Sheets</button>
     <label class="toolbar-checkbox">
-      <input type="checkbox" id="chk-match-pairs" />
+      <input type="checkbox" id="chk-match-pairs" checked />
       <span>จับคู่ Buy=Sell (Quantity) — แสดงว่าจับคู่แล้ว</span>
     </label>
   </div>
@@ -331,7 +412,11 @@
   <script>
     // const API_URL = 'http://localhost:5081';
     const API_URL = 'https://api.cayoshibot.com';
+    const BINANCE_TICKER_URL = 'https://api.binance.com/api/v3/ticker/price';
+    const BINANCE_WS_BASE = 'wss://stream.binance.com:9443/stream';
     const REQ_BASE = { OrderId: null };
+    const DEFAULT_SYMBOLS = ['XRPUSDT', 'BNBUSDT', 'BTCUSDT'];
+    const TICKER_RENDER_THROTTLE_MS = 400;
     function getReq() {
       const configEl = document.getElementById('filter-config-id');
       const symbolEl = document.getElementById('filter-symbol');
@@ -362,7 +447,11 @@
     let chartInstance = null;
     let highlightedOrderId = null;
     let matchedOrderIds = new Set();
-    let showMatchedPairs = false;
+    let showMatchedPairs = true;
+    let lastPrices = {}; // { 'XRPUSDT': 2.45, 'BNBUSDT': 580, ... }
+    let tickerWs = null;
+    let tickerReconnectTimer = null;
+    let tickerRenderScheduled = null;
 
     const el = {
       tbody: document.getElementById('tbody'),
@@ -383,6 +472,90 @@
       const quote = Number(o.quoteQuantityFilled ?? 0) || 0;
       return q ? quote / q : 0;
     }
+
+    /** Fetch last price from Binance for given symbols. Returns { 'XRPUSDT': number, ... }. */
+    async function getBinanceLastPrices(symbols) {
+      const out = {};
+      await Promise.all(symbols.map(async (sym) => {
+        try {
+          const res = await fetch(`${BINANCE_TICKER_URL}?symbol=${encodeURIComponent(sym)}`);
+          const data = await res.json().catch(() => ({}));
+          if (data && typeof data.price === 'string') out[sym] = parseFloat(data.price) || 0;
+        } catch (_) {}
+      }));
+      return out;
+    }
+
+    function updateLastPriceCard(prices) {
+      const loading = document.getElementById('last-price-loading');
+      const list = document.getElementById('last-price-list');
+      const hasPrices = Object.keys(prices).length > 0;
+      if (loading) loading.style.display = hasPrices ? 'none' : 'block';
+      if (list) {
+        list.style.display = hasPrices ? 'flex' : 'none';
+        const symbols = Object.keys(prices).sort();
+        list.innerHTML = symbols.map(s => `
+          <div class="tv-ticker-card">
+            <div class="tv-symbol">${s}</div>
+            <div class="tv-price">${formatNum(prices[s])}</div>
+            <div class="tv-live">Live</div>
+          </div>
+        `).join('');
+      }
+    }
+
+    function scheduleTickerRender() {
+      if (tickerRenderScheduled) return;
+      tickerRenderScheduled = setTimeout(() => {
+        tickerRenderScheduled = null;
+        updateLastPriceCard(lastPrices);
+        if (lastOrders.length) renderTable(lastOrders, selectedCardRow !== null);
+      }, TICKER_RENDER_THROTTLE_MS);
+    }
+
+    function stopTickerStream() {
+      if (tickerReconnectTimer) {
+        clearTimeout(tickerReconnectTimer);
+        tickerReconnectTimer = null;
+      }
+      if (tickerWs) {
+        try { tickerWs.close(); } catch (_) {}
+        tickerWs = null;
+      }
+    }
+
+    function startTickerStream(symbols) {
+      stopTickerStream();
+      if (!symbols || symbols.length === 0) symbols = DEFAULT_SYMBOLS;
+      const streams = symbols.map(s => `${(s || '').toLowerCase()}@ticker`).filter(Boolean);
+      if (streams.length === 0) return;
+      const url = `${BINANCE_WS_BASE}?streams=${streams.join('/')}`;
+      try {
+        const ws = new WebSocket(url);
+        tickerWs = ws;
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            const data = msg.data || msg;
+            const sym = (data.s || '').trim();
+            const priceStr = data.c;
+            if (sym && priceStr != null) {
+              const p = parseFloat(priceStr);
+              if (!isNaN(p)) {
+                lastPrices[sym] = p;
+                if (lastOrders.length || Object.keys(lastPrices).length) scheduleTickerRender();
+              }
+            }
+          } catch (_) {}
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+          tickerWs = null;
+          tickerReconnectTimer = setTimeout(() => startTickerStream(symbols), 5000);
+        };
+      } catch (_) {}
+    }
+
     const crosshairPlugin = {
       id: 'chartCrosshair',
       afterDraw(chart) {
@@ -911,8 +1084,8 @@
     function roundQty(q) {
       return Math.round(q * 1e8) / 1e8;
     }
-    /** Returns { displayList, matchedOrderIds }. จับคู่ 1-1 และเพิ่มการจับคู่หลายออเดอร์ (เช่น 2 SELL + 2 BUY ที่ผลรวม Quantity เท่ากัน). */
-    function computeMatchedPairsAndOrder(orders) {
+    /** Returns { displayList, matchedOrderIds, totalMatchedProfit }. จับคู่ 1-1 และเพิ่มการจับคู่หลายออเดอร์. Matched pairs: กำไร/TP% จากราคา fill จริง. Unmatched: ใช้ last price. */
+    function computeMatchedPairsAndOrder(orders, lastPricesBySymbol) {
       const matchedOrderIds = computeMatchedOrderIds(orders);
       const used = new Set();
       const qtyKey = (o) => roundQty(orderQty(o)).toString();
@@ -933,15 +1106,17 @@
         const sellList = sellByQty[key];
         const n = Math.min(buyList.length, sellList.length);
         for (let i = 0; i < n; i++) {
-          const buyQuote = Number(buyList[i].order.quoteQuantityFilled ?? 0) || 0;
-          const sellQuote = Number(sellList[i].order.quoteQuantityFilled ?? 0) || 0;
+          const buyOrder = buyList[i].order;
+          const sellOrder = sellList[i].order;
+          const buyQuote = Number(buyOrder.quoteQuantityFilled ?? 0) || 0;
+          const sellQuote = Number(sellOrder.quoteQuantityFilled ?? 0) || 0;
           const pairProfit = sellQuote - buyQuote;
-          const buyPriceAvg = priceAvgOrder(buyList[i].order);
-          const sellPriceAvg = priceAvgOrder(sellList[i].order);
+          const buyPriceAvg = priceAvgOrder(buyOrder);
+          const sellPriceAvg = priceAvgOrder(sellOrder);
           const tpPercent = buyPriceAvg ? ((sellPriceAvg - buyPriceAvg) / buyPriceAvg) * 100 : null;
           pairsRaw.push([
-            { order: buyList[i].order, originalIndex: buyList[i].originalIndex, pairProfit, tpPercent },
-            { order: sellList[i].order, originalIndex: sellList[i].originalIndex, pairProfit, tpPercent }
+            { order: buyOrder, originalIndex: buyList[i].originalIndex, pairProfit, tpPercent },
+            { order: sellOrder, originalIndex: sellList[i].originalIndex, pairProfit, tpPercent }
           ]);
           used.add(buyList[i].order.orderId);
           used.add(sellList[i].order.orderId);
@@ -992,9 +1167,27 @@
         }
       }
       const unmatchedList = [];
+      let totalUnmatchedProfit = 0;
       orders.forEach((o, idx) => {
         if (o.orderId != null && !matchedOrderIds.has(o.orderId)) {
-          unmatchedList.push({ order: o, pairIndex: null, originalIndex: idx });
+          let pairProfit = null;
+          let tpPercent = null;
+          const sym = (o.symbol || '').trim();
+          const lastP = lastPricesBySymbol && sym && lastPricesBySymbol[sym];
+          const qty = orderQty(o);
+          const priceAvg = priceAvgOrder(o);
+          if (lastP != null && lastP > 0 && qty > 0 && priceAvg > 0) {
+            const side = (o.side || '').toUpperCase();
+            if (side === 'BUY') {
+              pairProfit = (lastP - priceAvg) * qty;
+              tpPercent = ((lastP - priceAvg) / priceAvg) * 100;
+            } else {
+              pairProfit = (priceAvg - lastP) * qty;
+              tpPercent = ((priceAvg - lastP) / priceAvg) * 100;
+            }
+            totalUnmatchedProfit += pairProfit;
+          }
+          unmatchedList.push({ order: o, pairIndex: null, originalIndex: idx, pairProfit, tpPercent, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false });
         }
       });
       pairsRaw.sort((a, b) => (Number(b[0].order.orderId) || 0) - (Number(a[0].order.orderId) || 0));
@@ -1015,7 +1208,7 @@
           });
         }
       });
-      const totalMatchedProfit = pairsRaw.reduce((acc, pair) => acc + (pair[0].pairProfit || 0), 0);
+      const totalMatchedProfit = pairsRaw.reduce((acc, pair) => acc + (pair[0].pairProfit || 0), 0) + totalUnmatchedProfit;
       const displayList = [...unmatchedList, ...pairsList];
       return { displayList, matchedOrderIds, totalMatchedProfit };
     }
@@ -1070,7 +1263,7 @@
           existingSelect.remove();
         }
       }
-      const result = showMatchedPairs ? computeMatchedPairsAndOrder(orders) : { displayList: orders.map((o, i) => ({ order: o, pairIndex: null, originalIndex: i, pairProfit: null, tpPercent: null, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false })), matchedOrderIds: matchedOrderIds, totalMatchedProfit: 0 };
+      const result = showMatchedPairs ? computeMatchedPairsAndOrder(orders, lastPrices) : { displayList: orders.map((o, i) => ({ order: o, pairIndex: null, originalIndex: i, pairProfit: null, tpPercent: null, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false })), matchedOrderIds: matchedOrderIds, totalMatchedProfit: 0 };
       const displayList = result.displayList;
       if (showMatchedPairs) {
         matchedOrderIds = result.matchedOrderIds;
@@ -1112,9 +1305,9 @@
           <td>${formatNum(o.price)}</td>
           <td class="td-qty-filled">${formatNum(o.quantityFilled)}</td>
           <td class="td-quote-filled">${formatNum(o.quoteQuantityFilled)}</td>
-          <td class="td-profit">${item.pairProfit != null ? formatNum(item.pairProfit) : '—'}</td>
+          <td class="td-profit${item.pairProfit != null && Number(item.pairProfit) < 0 ? ' td-negative' : ''}">${item.pairProfit != null ? formatNum(item.pairProfit) : '—'}</td>
           <td class="td-price-avg">${formatNum((o.quantityFilled && Number(o.quantityFilled)) ? (Number(o.quoteQuantityFilled || 0) / Number(o.quantityFilled)) : null)}</td>
-          <td>${item.tpPercent != null ? formatNum(item.tpPercent) + '%' : '—'}</td>
+          <td class="${item.tpPercent != null && Number(item.tpPercent) < 0 ? 'td-tp-negative' : ''}">${item.tpPercent != null ? formatNum(item.tpPercent) + '%' : '—'}</td>
           <td>${formatDate(o.createTime)}</td>
           <td>${formatDate(o.updateTime)}</td>
         </tr>`;
@@ -1179,6 +1372,12 @@
         const rawOrders = data.orders || [];
         const orders = rawOrders.filter(o => (o.status || '').toUpperCase() !== 'CANCELED');
         lastOrders = orders;
+        const symbolsToFetch = [...new Set([...orders.map(o => o.symbol).filter(Boolean), ...DEFAULT_SYMBOLS])];
+        try {
+          lastPrices = await getBinanceLastPrices(symbolsToFetch.length ? symbolsToFetch : DEFAULT_SYMBOLS);
+          updateLastPriceCard(lastPrices);
+          startTickerStream(symbolsToFetch.length ? symbolsToFetch : DEFAULT_SYMBOLS);
+        } catch (_) {}
         renderTable(orders, selectedCardRow !== null);
         updateSummary(orders);
         updateChart(orders);
@@ -1203,6 +1402,15 @@
     document.getElementById('chk-match-pairs').addEventListener('change', function() {
       showMatchedPairs = this.checked;
       renderTable(lastOrders, selectedCardRow !== null);
+    });
+    document.getElementById('btn-refresh-last-price').addEventListener('click', async function() {
+      const symbols = [...new Set([...lastOrders.map(o => o.symbol).filter(Boolean), ...DEFAULT_SYMBOLS])];
+      try {
+        lastPrices = await getBinanceLastPrices(symbols.length ? symbols : DEFAULT_SYMBOLS);
+        updateLastPriceCard(lastPrices);
+        startTickerStream(symbols.length ? symbols : DEFAULT_SYMBOLS);
+        renderTable(lastOrders, selectedCardRow !== null);
+      } catch (_) {}
     });
     document.getElementById('btn-search').addEventListener('click', loadOrders);
     el.tbody.addEventListener('click', onTableRowClick);
