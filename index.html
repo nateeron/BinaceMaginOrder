@@ -338,7 +338,7 @@
       const startEl = document.getElementById('filter-start-time');
       const endEl = document.getElementById('filter-end-time');
       const limitEl = document.getElementById('filter-limit');
-      const configId = configEl ? (parseInt(configEl.value, 10) || 0) : 20;
+      const configId = configEl ? (parseInt(configEl.value, 10) || 0) : 4;
       const symbol = symbolEl && symbolEl.value ? symbolEl.value : 'XRPUSDT';
       const startVal = startEl && startEl.value ? startEl.value.trim() : '';
       const endVal = endEl && endEl.value ? endEl.value.trim() : '';
@@ -1208,7 +1208,23 @@
     el.tbody.addEventListener('click', onTableRowClick);
     loadSum1();
     renderSummaryCards();
-    loadOrders();
+
+    async function loadSettingIdsThenOrders() {
+      try {
+        const res = await fetch(`${API_URL}/api/SQLite/GetSettingIds`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const json = await res.json().catch(() => ({}));
+        if (json.success && json.data && json.data.length > 0 && json.data[0] != null) {
+          const configEl = document.getElementById('filter-config-id');
+          if (configEl) configEl.value = Number(json.data[0]);
+        }
+      } catch (_) {}
+      loadOrders();
+    }
+    loadSettingIdsThenOrders();
   </script>
 </body>
 </html>
