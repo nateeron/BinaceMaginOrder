@@ -31,12 +31,6 @@
       margin-bottom: 24px;
       color: var(--text);
     }
-    .summary-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
@@ -221,7 +215,8 @@
     .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
     .filter-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
     .filter-row input[type="number"] { width: 140px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
-    .filter-row input[type="datetime-local"] { width: 180px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
+    .filter-row input[type="date"] { width: 160px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
+    .filter-row input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.85; cursor: pointer; }
     .filter-row select { width: 120px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); font-size: 13px; }
     .filter-row input::placeholder { color: var(--muted); opacity: 0.8; }
     /* TradingView-style last price ticker — ยาวเท่า minichart TV */
@@ -325,82 +320,12 @@
       cursor: pointer;
     }
     .tv-refresh-btn:hover { background: #3d4f6d; }
-    /* TradingView Mini Charts — inside Last price card, ไม่เลยจอขณะย่อ */
-    .tv-mini-charts-wrap {
-      width: 100%;
-      max-width: 100%;
-      margin-top: 16px;
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0;
-      border-top: 1px solid var(--border);
-      overflow: hidden;
-      min-width: 0;
-    }
-    .tv-mini-chart-item {
-      min-height: 180px;
-      min-width: 0;
-      overflow: hidden;
-      border-right: 1px solid var(--border);
-    }
-    .tv-mini-chart-item:last-child { border-right: none; }
-    .tv-mini-chart-item tv-mini-chart {
-      display: block;
-      width: 100%;
-      max-width: 100%;
-      height: 180px;
-      min-width: 0;
-    }
-    @media (max-width: 768px) {
-      .tv-mini-charts-wrap { grid-template-columns: 1fr; }
-      .tv-mini-chart-item { border-right: none; border-bottom: 1px solid var(--border); }
-      .tv-mini-chart-item:last-child { border-bottom: none; }
-    }
   </style>
   <script type="module" src="https://widgets.tradingview-widget.com/w/th_TH/tv-mini-chart.js"></script>
 </head>
 <body>
   <h1>Binance Cross Margin Orders</h1>
 
-  <div class="summary-row" id="summary">
-    <div class="card">
-      <div class="card-title">Quantity BUY Total</div>
-      <div class="card-value buy" id="qty-buy">0</div>
-    </div>
-    <div class="card">
-      <div class="card-title">Quantity SELL Total</div>
-      <div class="card-value sell" id="qty-sell">0</div>
-    </div>
-    <div class="card">
-      <div class="card-title">BuyAll − SellAll (Quantity)</div>
-      <div class="card-value net" id="qty-net">0</div>
-    </div>
-    <div class="card">
-      <div class="card-title">quoteQuantityFilled BUY Total</div>
-      <div class="card-value buy" id="quote-buy">0</div>
-    </div>
-    <div class="card">
-      <div class="card-title">quoteQuantityFilled SELL Total</div>
-      <div class="card-value sell" id="quote-sell">0</div>
-    </div>
-    <div class="card">
-      <div class="card-title">BuyAll − SellAll (Quote)</div>
-      <div class="card-value net" id="quote-net">0</div>
-    </div>
-  </div>
-
-  <div class="filter-row">
-    <label>ConfigId <input type="number" id="filter-config-id" value="20" min="0" step="1" /></label>
-    <label>Symbol <select id="filter-symbol">
-      <option value="XRPUSDT">XRPUSDT</option>
-      <option value="BNBUSDT">BNBUSDT</option>
-      <option value="BTCUSDT">BTCUSDT</option>
-    </select></label>
-    <label>StartTime <input type="datetime-local" id="filter-start-time" /></label>
-    <label>EndTime <input type="datetime-local" id="filter-end-time" /></label>
-    <label>Limit <input type="number" id="filter-limit" value="1000" min="1" max="1000" /></label>
-    <button type="button" id="btn-search">Search</button>
-  </div>
   <div id="error" class="error" style="display: none;"></div>
 
   <div class="card" id="last-price-cards-wrap" style="margin-bottom: 16px;">
@@ -410,17 +335,6 @@
     </div>
     <div id="last-price-loading" style="font-size: 13px; color: var(--muted); padding: 8px 0;">Loading…</div>
     <div id="last-price-list" class="tv-ticker-wrap" style="display: none;"></div>
-    <div class="tv-mini-charts-wrap">
-      <div class="tv-mini-chart-item">
-        <tv-mini-chart symbol="BINANCE:XRPUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
-      </div>
-      <div class="tv-mini-chart-item">
-        <tv-mini-chart symbol="BINANCE:BNBUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
-      </div>
-      <div class="tv-mini-chart-item">
-        <tv-mini-chart symbol="BINANCE:BTCUSDT" theme="dark" time-frame="YTD"></tv-mini-chart>
-      </div>
-    </div>
   </div>
 
   <div class="chart-wrap">
@@ -452,7 +366,18 @@
   <div id="total-matched-profit-wrap" class="total-matched-profit-wrap" style="display: none;">
     <strong>Total Sum กำไร:</strong> <span id="total-matched-profit-value">0</span>
   </div>
-
+  <div class="filter-row">
+    <label>ConfigId <input type="number" id="filter-config-id" value="20" min="0" step="1" /></label>
+    <label>Symbol <select id="filter-symbol">
+      <option value="XRPUSDT">XRPUSDT</option>
+      <option value="BNBUSDT">BNBUSDT</option>
+      <option value="BTCUSDT">BTCUSDT</option>
+    </select></label>
+    <label>StartTime <input type="date" id="filter-start-time" /></label>
+    <label>EndTime <input type="date" id="filter-end-time" /></label>
+    <label>Limit <input type="number" id="filter-limit" value="1000" min="1" max="1000" /></label>
+    <button type="button" id="btn-search">Search</button>
+  </div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -504,14 +429,12 @@
       const startVal = startEl && startEl.value ? startEl.value.trim() : '';
       const endVal = endEl && endEl.value ? endEl.value.trim() : '';
       const limitVal = limitEl ? (parseInt(limitEl.value, 10) || 1000) : 1000;
-      const startMs = startVal === '' ? null : (new Date(startVal).getTime() || null);
-      const endMs = endVal === '' ? null : (new Date(endVal).getTime() || null);
       return {
         ...REQ_BASE,
         ConfigId: configId,
         Symbol: symbol,
-        StartTime: isNaN(startMs) ? null : startMs,
-        EndTime: isNaN(endMs) ? null : endMs,
+        StartTime: startVal === '' ? null : startVal,
+        EndTime: endVal === '' ? null : endVal,
         Limit: Math.min(1000, Math.max(1, limitVal))
       };
     }
@@ -947,12 +870,12 @@
       const wb = XLSX.utils.book_new();
       const summaryData = [
         ['Report Summary'],
-        ['Quantity BUY Total', el.qtyBuy.textContent],
-        ['Quantity SELL Total', el.qtySell.textContent],
-        ['BuyAll − SellAll (Quantity)', el.qtyNet.textContent],
-        ['quoteQuantityFilled BUY', el.quoteBuy.textContent],
-        ['quoteQuantityFilled SELL', el.quoteSell.textContent],
-        ['BuyAll − SellAll (Quote)', el.quoteNet.textContent]
+        ['Quantity BUY Total', (el.qtyBuy && el.qtyBuy.textContent) || ''],
+        ['Quantity SELL Total', (el.qtySell && el.qtySell.textContent) || ''],
+        ['BuyAll − SellAll (Quantity)', (el.qtyNet && el.qtyNet.textContent) || ''],
+        ['quoteQuantityFilled BUY', (el.quoteBuy && el.quoteBuy.textContent) || ''],
+        ['quoteQuantityFilled SELL', (el.quoteSell && el.quoteSell.textContent) || ''],
+        ['BuyAll − SellAll (Quote)', (el.quoteNet && el.quoteNet.textContent) || '']
       ];
       const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
@@ -1338,12 +1261,12 @@
           quoteSell += quote;
         }
       }
-      el.qtyBuy.textContent = formatNum(qtyBuy);
-      el.qtySell.textContent = formatNum(qtySell);
-      el.qtyNet.textContent = formatNum(qtyBuy - qtySell);
-      el.quoteBuy.textContent = formatNum(quoteBuy);
-      el.quoteSell.textContent = formatNum(quoteSell);
-      el.quoteNet.textContent = formatNum(quoteBuy - quoteSell);
+      if (el.qtyBuy) el.qtyBuy.textContent = formatNum(qtyBuy);
+      if (el.qtySell) el.qtySell.textContent = formatNum(qtySell);
+      if (el.qtyNet) el.qtyNet.textContent = formatNum(qtyBuy - qtySell);
+      if (el.quoteBuy) el.quoteBuy.textContent = formatNum(quoteBuy);
+      if (el.quoteSell) el.quoteSell.textContent = formatNum(quoteSell);
+      if (el.quoteNet) el.quoteNet.textContent = formatNum(quoteBuy - quoteSell);
     }
 
     function renderTable(orders, selectMode) {
