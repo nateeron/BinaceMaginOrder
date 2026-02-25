@@ -181,6 +181,8 @@
     tr.tr-side-sell .td-quantity, tr.tr-side-sell .td-qty-filled { color: #e2972f; }
     .table-wrap .td-quote-filled { color: #29beb5; }
     .table-wrap .td-profit { color: #3c8b42; }
+    .table-wrap .th-order-list { width: 60px; text-align: center; }
+    .table-wrap .td-order-list { text-align: center; }
     .table-wrap .td-profit.td-negative { color: #de5959; }
     .table-wrap .td-tp-negative { color: #de5959; }
     .table-wrap .td-type-market { color: #7378f1; }
@@ -357,6 +359,9 @@
     <button type="button" id="btn-new-summary">New Summary</button>
     <button type="button" id="btn-export-excel">Export Excel</button>
     <button type="button" id="btn-export-csv">Export CSV / Google Sheets</button>
+    <button type="button" id="btn-order-list">Order List</button>
+    <button type="button" id="btn-set-order-list">Set Order List</button>
+    <button type="button" id="btn-show-order-list-only">Show Order List Only</button>
     <label class="toolbar-checkbox">
       <input type="checkbox" id="chk-match-pairs" checked />
       <span>จับคู่ Buy=Sell (Quantity) — แสดงว่าจับคู่แล้ว</span>
@@ -388,6 +393,7 @@
         <tr id="thead-row">
           <th class="th-pair" id="th-pair" style="display: none;">คู่</th>
           <th>Order ID</th>
+          <th class="th-order-list">Order list</th>
           <th>Symbol</th>
           <th>Side</th>
           <th>Type</th>
@@ -404,7 +410,7 @@
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="14" style="text-align: center; color: var(--muted);">Loading…</td></tr>
+        <tr><td colspan="15" style="text-align: center; color: var(--muted);">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -457,6 +463,40 @@
     let tickerWs = null;
     let tickerReconnectTimer = null;
     let tickerRenderScheduled = null;
+    let savedOrderIds = new Set(); // Order IDs saved in cookie "OrderList"
+    let showOnlyOrderList = false; // filter table to show only saved Order IDs
+
+    function getCookie(name) {
+      const parts = document.cookie ? document.cookie.split(';') : [];
+      for (let i = 0; i < parts.length; i++) {
+        const c = parts[i].trim();
+        if (c.startsWith(name + '=')) {
+          return decodeURIComponent(c.substring(name.length + 1));
+        }
+      }
+      return null;
+    }
+    function loadOrderListFromCookie() {
+      try {
+        const raw = getCookie('OrderList');
+        if (!raw) {
+          savedOrderIds = new Set();
+          return;
+        }
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) savedOrderIds = new Set(arr.map(String));
+        else savedOrderIds = new Set();
+      } catch (_) {
+        savedOrderIds = new Set();
+      }
+    }
+    function saveOrderListToCookie() {
+      try {
+        const arr = Array.from(savedOrderIds);
+        document.cookie = 'OrderList=' + encodeURIComponent(JSON.stringify(arr)) + '; path=/; max-age=31536000';
+      } catch (_) {}
+    }
+    loadOrderListFromCookie();
 
     const el = {
       tbody: document.getElementById('tbody'),
@@ -1276,10 +1316,13 @@
 
     function renderTable(orders, selectMode) {
       const sel = selectMode === true;
+      const listFilteredOrders = showOnlyOrderList
+        ? orders.filter(o => o && o.orderId != null && savedOrderIds.has(String(o.orderId)))
+        : orders;
       const thPair = document.getElementById('th-pair');
       if (thPair) thPair.style.display = showMatchedPairs ? '' : 'none';
-      const baseCols = 14 + (showMatchedPairs ? 1 : 0);
-      if (!orders || !orders.length) {
+      const baseCols = 15 + (showMatchedPairs ? 1 : 0);
+      if (!listFilteredOrders || !listFilteredOrders.length) {
         el.tbody.innerHTML = '<tr><td colspan="' + (sel ? baseCols + 1 : baseCols) + '" style="text-align: center; color: var(--muted);">No orders.</td></tr>';
         if (el.theadRow) {
           const existingSelect = el.theadRow.querySelector('.th-select');
@@ -1304,9 +1347,9 @@
         }
       }
       const result = showMatchedPairs
-        ? computeMatchedPairsAndOrder(orders, pauseRealtimeProfit ? null : lastPrices)
+        ? computeMatchedPairsAndOrder(listFilteredOrders, pauseRealtimeProfit ? null : lastPrices)
         : {
-            displayList: orders.map((o, i) => {
+            displayList: listFilteredOrders.map((o, i) => {
               let pairProfit = null, tpPercent = null;
               if (!pauseRealtimeProfit && (o.side || '').toUpperCase() === 'BUY') {
                 const sym = (o.symbol || '').trim();
@@ -1352,10 +1395,13 @@
         const multiClass = item.isMultiOrder ? ' tr-pair-multi' : '';
         const rowClass = (sel ? (' tr-selectable' + (checked ? ' tr-selected' : '')) : ' tr-clickable') + trSide + (isMatched ? ' tr-matched' : '') + (pairStart ? ' tr-pair-start' : '') + (pairEnd ? ' tr-pair-end' : '') + multiClass + multiFirst + multiLast;
         const pairCell = showMatchedPairs ? `<td class="td-pair">${item.pairIndex != null ? item.pairIndex : '—'}</td>` : '';
+        const inOrderList = o.orderId != null && savedOrderIds.has(String(o.orderId));
+        const orderListCell = `<td class="td-order-list"><input type="checkbox" class="order-list-checkbox" data-order-id="${o.orderId ?? ''}" ${inOrderList ? 'checked' : ''} /></td>`;
         return `<tr data-order-index="${i}" data-order-id="${o.orderId ?? ''}" class="${rowClass}">
           ${selectCell}
           ${pairCell}
           <td>${o.orderId ?? '—'}</td>
+          ${orderListCell}
           <td>${o.symbol ?? '—'}</td>
           <td class="${sideClass}">${o.side ?? '—'}</td>
           <td class="td-type${typeClass}">${o.type ?? '—'}</td>
@@ -1467,6 +1513,31 @@
       pauseRealtimeProfit = this.checked;
       renderTable(lastOrders, selectedCardRow !== null);
     });
+    document.getElementById('btn-order-list').addEventListener('click', function() {
+      if (!savedOrderIds.size) {
+        alert('Order list is empty.');
+        return;
+      }
+      alert('Order list IDs: ' + Array.from(savedOrderIds).join(', '));
+    });
+    document.getElementById('btn-set-order-list').addEventListener('click', function() {
+      savedOrderIds.clear();
+      el.tbody.querySelectorAll('input.order-list-checkbox:checked').forEach(function(cb) {
+        const id = (cb.dataset.orderId || '').trim();
+        if (id) savedOrderIds.add(id);
+      });
+      saveOrderListToCookie();
+      alert('Order List saved (' + savedOrderIds.size + ' ID(s)).');
+    });
+    document.getElementById('btn-show-order-list-only').addEventListener('click', function() {
+      if (!savedOrderIds.size) {
+        alert('Order list is empty.');
+        return;
+      }
+      showOnlyOrderList = !showOnlyOrderList;
+      this.textContent = showOnlyOrderList ? 'Show All Orders' : 'Show Order List Only';
+      renderTable(lastOrders, selectedCardRow !== null);
+    });
     document.getElementById('btn-refresh-last-price').addEventListener('click', async function() {
       const symbols = [...new Set([...lastOrders.map(o => o.symbol).filter(Boolean), ...DEFAULT_SYMBOLS])];
       try {
@@ -1479,6 +1550,15 @@
     });
     document.getElementById('btn-search').addEventListener('click', loadOrders);
     el.tbody.addEventListener('click', onTableRowClick);
+    el.tbody.addEventListener('change', function(e) {
+      const target = e.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      if (!target.classList.contains('order-list-checkbox')) return;
+      const id = (target.dataset.orderId || '').trim();
+      if (!id) return;
+      if (target.checked) savedOrderIds.add(id); else savedOrderIds.delete(id);
+      saveOrderListToCookie();
+    });
     loadSum1();
     renderSummaryCards();
 
