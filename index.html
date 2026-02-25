@@ -1303,7 +1303,26 @@
           existingSelect.remove();
         }
       }
-      const result = showMatchedPairs ? computeMatchedPairsAndOrder(orders, pauseRealtimeProfit ? null : lastPrices) : { displayList: orders.map((o, i) => ({ order: o, pairIndex: null, originalIndex: i, pairProfit: null, tpPercent: null, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false })), matchedOrderIds: matchedOrderIds, totalMatchedProfit: 0 };
+      const result = showMatchedPairs
+        ? computeMatchedPairsAndOrder(orders, pauseRealtimeProfit ? null : lastPrices)
+        : {
+            displayList: orders.map((o, i) => {
+              let pairProfit = null, tpPercent = null;
+              if (!pauseRealtimeProfit && (o.side || '').toUpperCase() === 'BUY') {
+                const sym = (o.symbol || '').trim();
+                const lastP = lastPrices[sym];
+                const qty = orderQty(o);
+                const priceAvg = priceAvgOrder(o);
+                if (lastP != null && lastP > 0 && qty > 0 && priceAvg > 0) {
+                  pairProfit = (lastP - priceAvg) * qty;
+                  tpPercent = ((lastP - priceAvg) / priceAvg) * 100;
+                }
+              }
+              return { order: o, pairIndex: null, originalIndex: i, pairProfit, tpPercent, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false };
+            }),
+            matchedOrderIds: matchedOrderIds,
+            totalMatchedProfit: 0
+          };
       const displayList = result.displayList;
       if (showMatchedPairs) {
         matchedOrderIds = result.matchedOrderIds;
