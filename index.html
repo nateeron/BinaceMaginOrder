@@ -361,6 +361,10 @@
       <input type="checkbox" id="chk-match-pairs" checked />
       <span>จับคู่ Buy=Sell (Quantity) — แสดงว่าจับคู่แล้ว</span>
     </label>
+    <label class="toolbar-checkbox">
+      <input type="checkbox" id="chk-pause-realtime-profit" checked />
+      <span>หยุดคำนวน กำไร realtime</span>
+    </label>
   </div>
 
   <div id="total-matched-profit-wrap" class="total-matched-profit-wrap" style="display: none;">
@@ -435,7 +439,7 @@
         Symbol: symbol,
         StartTime: startVal === '' ? null : startVal,
         EndTime: endVal === '' ? null : endVal,
-        Limit: Math.min(1000, Math.max(1, limitVal))
+        Limit: Math.min(200, Math.max(1, limitVal))
       };
     }
 
@@ -447,6 +451,7 @@
     let highlightedOrderId = null;
     let matchedOrderIds = new Set();
     let showMatchedPairs = true;
+    let pauseRealtimeProfit = true; // default หยุดคำนวน กำไร realtime
     let lastPrices = {}; // { 'XRPUSDT': 2.45, 'BNBUSDT': 580, ... }
     let lastPriceHistory = {}; // { 'XRPUSDT': [2.1, 2.2, ...], ... } for mini chart
     let tickerWs = null;
@@ -578,7 +583,7 @@
                 if (!lastPriceHistory[sym]) lastPriceHistory[sym] = [];
                 lastPriceHistory[sym].push(p);
                 if (lastPriceHistory[sym].length > PRICE_HISTORY_MAX) lastPriceHistory[sym].shift();
-                if (lastOrders.length || Object.keys(lastPrices).length) scheduleTickerRender();
+                if (!pauseRealtimeProfit && (lastOrders.length || Object.keys(lastPrices).length)) scheduleTickerRender();
               }
             }
           } catch (_) {}
@@ -1298,7 +1303,7 @@
           existingSelect.remove();
         }
       }
-      const result = showMatchedPairs ? computeMatchedPairsAndOrder(orders, lastPrices) : { displayList: orders.map((o, i) => ({ order: o, pairIndex: null, originalIndex: i, pairProfit: null, tpPercent: null, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false })), matchedOrderIds: matchedOrderIds, totalMatchedProfit: 0 };
+      const result = showMatchedPairs ? computeMatchedPairsAndOrder(orders, pauseRealtimeProfit ? null : lastPrices) : { displayList: orders.map((o, i) => ({ order: o, pairIndex: null, originalIndex: i, pairProfit: null, tpPercent: null, isMultiOrder: false, isFirstInGroup: false, isLastInGroup: false })), matchedOrderIds: matchedOrderIds, totalMatchedProfit: 0 };
       const displayList = result.displayList;
       if (showMatchedPairs) {
         matchedOrderIds = result.matchedOrderIds;
@@ -1437,6 +1442,10 @@
     });
     document.getElementById('chk-match-pairs').addEventListener('change', function() {
       showMatchedPairs = this.checked;
+      renderTable(lastOrders, selectedCardRow !== null);
+    });
+    document.getElementById('chk-pause-realtime-profit').addEventListener('change', function() {
+      pauseRealtimeProfit = this.checked;
       renderTable(lastOrders, selectedCardRow !== null);
     });
     document.getElementById('btn-refresh-last-price').addEventListener('click', async function() {
